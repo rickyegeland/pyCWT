@@ -125,24 +125,6 @@ class MotherWavelet(object):
         Returns an instance of the Wavelet class.  The coefficients of the transform
         can be obtain by the coefs() method (i.e.  wavelet.coefs() )
 
-        Examples
-        --------
-        Create instance of the Morlet mother wavelet, perform the
-        continuous wavelet transform and plot the scalogram.
-
-        # import numpy as np
-        # import cwt
-        #
-        # P = 17.0 # period
-        # D = 150.0 # duration of time series, same units as P
-        # N = 10 * D # number of samples in time series
-        # t = np.linspace(0, D, N)
-        # y = np.sin(2 * np.pi * t / P)
-        #
-        # wavelet = Morlet()
-        # result = wavelet.cwt(t, y)
-        # result.scalogram()
-
         References
         ----------
         Addison, P. S., 2002: The Illustrated Wavelet Transform Handbook.  Taylor
@@ -330,18 +312,23 @@ class Morlet(MotherWavelet):
     Returns an instance of the MotherWavelet class which is used in the cwt
     and icwt functions.
 
-    Examples
+    Example
     --------
-    Create instance of Morlet mother wavelet using 10 scales, perform the
-    continuous wavelet transform, and plot the resulting scalogram.
+    Create instance of the Morlet mother wavelet, perform the
+    continuous wavelet transform and plot the scalogram.
 
-    # x = numpy.arange(0,2*numpy.pi,numpy.pi/8.)
-    # data = numpy.sin(x**2)
-    # scales = numpy.arange(10)
-    #
-    # mother_wavelet = Morlet(len_signal=len(data), scales = np.arange(10))
-    # wavelet = cwt(data, mother_wavelet)
-    # wave_coefs.scalogram()
+    >>> import numpy as np
+    >>> import cwt
+    >>>
+    >>> P = 17.0 # period
+    >>> D = 150.0 # duration of time series, same units as P
+    >>> N = 10 * D # number of samples in time series
+    >>> t = np.linspace(0, D, N)
+    >>> y = np.sin(2 * np.pi * t / P)
+    >>>
+    >>> wavelet = cwt.Morlet()
+    >>> result = wavelet.cwt(t, y)
+    >>> result.scalogram()
 
     Notes
     -----
@@ -491,25 +478,22 @@ class WaveletResult(object):
 
         Examples
         --------
-        Use the Morlet mother wavelet to perform wavelet transform on 'data', then
+        Use the Morlet mother wavelet to perform wavelet transform on 'y', then
         use icwt to compute the inverse wavelet transform to come up with an estimate
-        of data ('data2').  Note that data2 is not exactly equal data.
+        of data ('y2').  Note that y2 is not exactly equal to y.
 
-        # import matplotlib.pyplot as plt
-        # from scipy.signal import SDG, Morlet, cwt, icwt, fft, ifft
-        # import numpy as np
-        #
-        # x = np.arange(0,2*np.pi,np.pi/64)
-        # data = np.sin(8*x)
-        # scales=np.arange(0.5,17)
-        #
-        # mother_wavelet = Morlet(len_signal = len(data), scales = scales)
-        # wave_coefs=cwt(data, mother_wavelet)
-        # data2 = icwt(wave_coefs)
-        #
-        # plt.plot(data)
-        # plt.plot(data2)
-        # plt.show()
+        >>> import numpy as np
+        >>> import cwt
+        >>>
+        >>> P = 17.0 # period
+        >>> D = 150.0 # duration of time series, same units as P
+        >>> N = 10 * D # number of samples in time series
+        >>> t = np.linspace(0, D, N)
+        >>> y = np.sin(2 * np.pi * t / P)
+        >>>
+        >>> wavelet = cwt.Morlet()
+        >>> result = wavelet.cwt(t, y)
+        >>> y2 = result.icwt()
 
         References
         ----------
@@ -652,21 +636,6 @@ class WaveletResult(object):
         Returns
         -------
         None
-
-        Examples
-        --------
-        Create instance of SDG mother wavelet, normalized, using 10 scales and the
-        center frequency of the Fourier transform as the characteristic frequency.
-        Then, perform the continuous wavelet transform and plot the scalogram.
-
-        # x = numpy.arange(0,2*numpy.pi,numpy.pi/8.)
-        # data = numpy.sin(x**2)
-        # scales = numpy.arange(10)
-        #
-        # mother_wavelet = SDG(len_signal = len(data), scales = np.arange(10), normalize = True, fc = 'center')
-        # wavelet = cwt(data, mother_wavelet)
-        # wave_coefs.scalogram(origin = 'bottom')
-
         """
 
         if ts is not None:
