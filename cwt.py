@@ -68,7 +68,8 @@ class MotherWavelet(object):
         self.mask = mask.astype(bool)
         return self.mask
 
-    def cwt(self, t, y, scales=None, pad_to=None, limit_coi=True, weighting_function=lambda x: x**(-0.5), deep_copy=True):
+    def cwt(self, t, y, scales=None, scale_ival=1./8., pad_to=None, limit_coi=True,
+            weighting_function=lambda x: x**(-0.5), deep_copy=True):
         """Computes the continuous wavelet transform of y
 
         This function computes the continuous wavelet transform of y
@@ -135,7 +136,7 @@ class MotherWavelet(object):
         signal_dtype = y.dtype
     
         # Initialize the scales
-        self.init_scales(t, scales=scales, pad_to=pad_to, limit_coi=limit_coi)
+        self.init_scales(t, scales=scales, scale_ival=scale_ival, pad_to=pad_to, limit_coi=limit_coi)
 
         # Transform the signal and mother wavelet into the Fourier domain
         yf=fft(y, self.len_wavelet)
@@ -365,7 +366,7 @@ class Morlet(MotherWavelet):
         self.cg = quad(lambda x : 2. * np.sqrt(np.pi) * np.exp(-np.power((2. *
                        np.pi * x - 2. * np.pi * f0), 2)), -np.Inf, np.Inf)[0]
 
-    def init_scales(self, t, scales=None, pad_to=None, limit_coi=True):
+    def init_scales(self, t, scales=None, scale_ival=1./8., pad_to=None, limit_coi=True):
         """Initialize the scales and other values derived from the time axis"""
         N = t.size
         T = t[-1] - t[0]
@@ -395,10 +396,9 @@ class Morlet(MotherWavelet):
                 # compute Nscales to scan from P=0 to P=T
                 max_period = T
             max_scale = max_period * self.fc * self.sampf
-            min_period = 1 / self.sampf
+            min_period = 2. / self.sampf
             min_scale = min_period * self.fc * self.sampf # == self.fc
-            delta_scale = 0.125 # TODO: set in class
-            self.scales = np.arange(min_scale, max_scale, delta_scale)
+            self.scales = np.arange(min_scale, max_scale, scale_ival)
         else:
             self.scales = scales
 
