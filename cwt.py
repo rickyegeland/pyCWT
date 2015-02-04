@@ -15,41 +15,42 @@ class MotherWavelet(object):
     cwt related functions.
 
     """
-
-    def init_scales(self, t, scales=None, pad_to=None):
-        """Initialize the scales and other values derived from the time axis.
-
-        This method must be implemented by all subclasses of MotherWavelet
+    
+    @staticmethod
+    def cg(self):
+        """To be implemented by subclass -- returns admissibility constant
         """
+        raise NotImplementedError('cg() needs to be implemented for the mother wavelet')
 
-        raise NotImplementedError('init_scales() needs to be implemented for the mother wavelet')
+    @staticmethod
+    def fc(self):
+        """To be implemented by subclass -- returns central frequency
+        """
+        raise NotImplementedError('fc() needs to be implemented for the mother wavelet')
 
     @staticmethod
     def coefs(self):
-        """Raise error if method for calculating mother wavelet coefficients is
-        missing!
-
+        """To be implemented by subclass -- returns mother wavelet coefficients
         """
 
         raise NotImplementedError('coefs() needs to be implemented for the mother wavelet')
 
     @staticmethod
-    def coi_coef(sampf):
-        """Raise error if Cone of Influence coefficient is not set in
-        subclass wavelet. To follow the convention in the literature, please define your
+    def coi_coef(self):
+        """To be implemented by subclass -- returns cone-of-influence coefficient
+
+        To follow the convention in the literature, please define your
         COI coef as a function of period, not scale - this will ensure
         compatibility with the scalogram method.
-
         """
 
         raise NotImplementedError('coi_coef() needs to be implemented in subclass wavelet')
 
-    #add methods for computing cone of influence and mask
     def coi(self):
         """Compute cone of influence."""
 
-        y1 =  self.coi_coef * np.arange(0, self.len_signal / 2)
-        y2 = -self.coi_coef * np.arange(0, self.len_signal / 2) + y1[-1]
+        y1 =  self.coi_coef() * np.arange(0, self.len_signal / 2)
+        y2 = -self.coi_coef() * np.arange(0, self.len_signal / 2) + y1[-1]
         coi = np.r_[y1, y2]
         return coi
 
@@ -59,14 +60,47 @@ class MotherWavelet(object):
         Sets self.mask as an array of bools for use in np.ma.array('', mask=mask)
 
         """
-
-        mask = np.ones(self.coefs.shape)
-        masks = self.coi_coef * self.scales
+        
+        coefs = self.coefs()
+        mask = np.ones(coefs.shape)
+        masks = self.coi_coef() * self.scales
         for s in range(0, len(self.scales)):
             if (s != 0) and (int(np.ceil(masks[s])) < mask.shape[1]):
                 mask[s,np.ceil(int(masks[s])):-np.ceil(int(masks[s]))] = 0
         self.mask = mask.astype(bool)
         return self.mask
+
+    def init_scales(self, t, scales=None, scale_ival=1./8., pad_to=None, limit_coi=True):
+        """Initialize the scales and other values derived from the time axis.
+
+        This method must be implemented by all subclasses of MotherWavelet
+        """
+        N = t.size
+        T = t[-1] - t[0]
+        self.len_signal = N
+        self.sampf = 1. * N/T
+
+        # Set total length of wavelet to account for zero padding
+        self.pad_to = pad_to
+        if self.pad_to is None:
+            self.len_wavelet = self.len_signal
+        else:
+            self.len_wavelet = self.pad_to
+
+        # Initialize the scales
+        if scales is None:
+            if limit_coi:
+                max_period = np.max(self.coi())
+                max_period = np.min([max_period, T])
+            else:
+                # compute Nscales to scan from P=0 to P=T
+                max_period = T
+            max_scale = max_period * self.fc() * self.sampf
+            min_period = 2. / self.sampf # TODO: per-class min_period?
+            min_scale = min_period * self.fc() * self.sampf # == self.fc
+            self.scales = np.arange(min_scale, max_scale, scale_ival)
+        else:
+            self.scales = scales
 
     def cwt(self, t, y, scales=None, scale_ival=1./8., pad_to=None, limit_coi=True,
             weighting_function=lambda x: x**(-0.5), deep_copy=True):
@@ -180,58 +214,40 @@ class MotherWavelet(object):
 class SDG(MotherWavelet):
     """Class for the SDG MotherWavelet (a subclass of MotherWavelet).
 
-    SDG(self, len_signal = None, pad_to = None, scales = None, sampf = 1,
-        normalize = True, fc = 'bandpass')
+    SDG(self, normalize = True, fc = 'bandpass')
 
     Parameters
     ----------
-    len_signal : int
-        Length of time series to be decomposed.
-
-    pad_to : int
-        Pad time series to a total length `pad_to` using zero padding (note,
-        the signal will be zero padded automatically during continuous wavelet
-        transform if pad_to is set). This is used in the fft function when
-        performing the convolution of the wavelet and mother wavelet in Fourier
-        space.
-
-    scales : array
-        Array of scales used to initialize the mother wavelet.
-
-    sampf : float
-        Sample frequency of the time series to be decomposed.
-
     normalize : bool
         If True, the normalized version of the mother wavelet will be used (i.e.
         the mother wavelet will have unit energy).
 
-    fc : string
+    fc_mode : string
         Characteristic frequency - use the 'bandpass' or 'center' frequency of
         the Fourier spectrum of the mother wavelet to relate scale to period
         (default is 'bandpass').
 
     Returns
     -------
-    Returns an instance of the MotherWavelet class which is used in the cwt and
-    icwt functions.
+    Returns an instance of the MotherWavelet class
 
-    Examples
+    Example
     --------
-    Create instance of SDG mother wavelet, normalized, using 10 scales and the
-    center frequency of the Fourier transform as the characteristic frequency.
-    Then, perform the continuous wavelet transform and plot the scalogram.
+    Create instance of the SDG mother wavelet, perform the
+    continuous wavelet transform and plot the scalogram.
 
-    # x = numpy.arange(0,2*numpy.pi,numpy.pi/8.)
-    # data = numpy.sin(x**2)
-    # scales = numpy.arange(10)
-    #
-    # mother_wavelet = SDG(len_signal = len(data), scales = np.arange(10),normalize = True, fc = 'center')
-    # wavelet = cwt(data, mother_wavelet)
-    # wave_coefs.scalogram()
-
-    Notes
-    -----
-    None
+    >>> import numpy as np
+    >>> import cwt
+    >>>
+    >>> P = 17.0 # period
+    >>> D = 150.0 # duration of time series, same units as P
+    >>> N = 10 * D # number of samples in time series
+    >>> t = np.linspace(0, D, N)
+    >>> y = np.sin(2 * np.pi * t / P)
+    >>>
+    >>> wavelet = cwt.SDG(normalize='true', fc='center')
+    >>> result = wavelet.cwt(t, y)
+    >>> result.scalogram()
 
     References
     ----------
@@ -240,41 +256,34 @@ class SDG(MotherWavelet):
 
     """
 
-    def __init__(self,len_signal=None,pad_to=None,scales=None,sampf=1,normalize=True, fc = 'bandpass'):
+    def __init__(self, normalize=True, fc_mode='bandpass'):
         """Initilize SDG mother wavelet"""
 
         self.name='second degree of a Gaussian (mexican hat)'
-        self.sampf = sampf
-        self.scales = scales
-        self.len_signal = len_signal
         self.normalize = normalize
+        self.fc_mode = fc
 
-        #set total length of wavelet to account for zero padding
-        if pad_to is None:
-            self.len_wavelet = len_signal
+    def cg(self):
+        # Set admissibility constant
+        if self.normalize:
+            return 4 * np.sqrt(np.pi) / 3.
         else:
-            self.len_wavelet = pad_to
+            return np.pi
 
-        #set admissibility constant
-        if normalize:
-            self.cg = 4 * np.sqrt(np.pi) / 3.
+    def fc(self):
+        # Define characteristic frequency
+        if self.fc_mode is 'bandpass':
+            return np.sqrt(5./2.) * self.sampf / (2 * np.pi)
+        elif self.fc_mode is 'center':
+            return np.sqrt(2.) * self.sampf / (2 * np.pi)
         else:
-            self.cg = np.pi
+            raise CharacteristicFrequencyError("fc=%s not defined"%(fc,))
 
-        #define characteristic frequency
-        if fc is 'bandpass':
-            self.fc = np.sqrt(5./2.) * self.sampf/(2 * np.pi)
-        elif fc is 'center':
-            self.fc = np.sqrt(2.) * self.sampf / (2 * np.pi)
-        else:
-            raise CharacteristicFrequencyError("fc = %s not defined"%(fc,))
-
+    def coi_coef(self):
         # coi_coef defined under the assumption that period is used, not scale
-        self.coi_coef = 2 * np.pi * np.sqrt(2. / 5.) * self.fc # Torrence and
-                                                               # Compo 1998
+        return 2 * np.pi * np.sqrt(2. / 5.) * self.fc() # Torrence and
+                                                      # Compo 1998
 
-        # compute coefficients for the dilated mother wavelet
-        self.coefs = self.coefs()
 
     def coefs(self):
         """Calculate the coefficients for the SDG mother wavelet"""
@@ -292,14 +301,12 @@ class SDG(MotherWavelet):
 
         mw = c * (1. + xsd) * np.exp(xsd / 2.)
 
-        self.coefs = mw
-
         return mw
 
 class Morlet(MotherWavelet):
     """Class for the Morlet MotherWavelet (a subclass of MotherWavelet).
 
-    Morlet(self, scales = None, f0 = 0.849)
+    Morlet(self, f0 = 0.849)
 
     Parameters
     ----------
@@ -310,8 +317,7 @@ class Morlet(MotherWavelet):
 
     Returns
     -------
-    Returns an instance of the MotherWavelet class which is used in the cwt
-    and icwt functions.
+    Returns an instance of the MotherWavelet class
 
     Example
     --------
@@ -351,10 +357,12 @@ class Morlet(MotherWavelet):
 
         self.normalize = True
         self.name = 'Morlet'
+        self.f0 = f0
 
-        # define characteristic frequency
-        self.fc = f0
+    def fc(self):
+        return self.f0
 
+    def cg(self):
         # set admissibility constant
         # based on the simplified Morlet wavelet energy spectrum
         # in Addison (2002), eqn (2.39) - should be ok for f0 >0.84
@@ -363,45 +371,17 @@ class Morlet(MotherWavelet):
         #y = 2. * np.sqrt(np.pi) * np.exp(-np.power((2. * np.pi * f -
         #    2. * np.pi * self.fc), 2))
         #self.cg =  trapz(y[1:] / f[1:]) * (f[1]-f[0])
-        self.cg = quad(lambda x : 2. * np.sqrt(np.pi) * np.exp(-np.power((2. *
+        return quad(lambda x : 2. * np.sqrt(np.pi) * np.exp(-np.power((2. *
                        np.pi * x - 2. * np.pi * f0), 2)), -np.Inf, np.Inf)[0]
 
-    def init_scales(self, t, scales=None, scale_ival=1./8., pad_to=None, limit_coi=True):
-        """Initialize the scales and other values derived from the time axis"""
-        N = t.size
-        T = t[-1] - t[0]
-        self.len_signal = N
-        self.sampf = 1. * N/T
-
-        # set total length of wavelet to account for zero padding
-        self.pad_to = pad_to
-        if self.pad_to is None:
-            self.len_wavelet = self.len_signal
-        else:
-            self.len_wavelet = self.pad_to
-
+    def coi_coef(self):
         # Cone of influence coefficient
         # See Torrence and Compo 1998 Fortran code:
         # http://paos.colorado.edu/research/wavelets/wave_fortran/wavelet.f
-        w0 = 2. * np.pi * self.fc # angular frequency
+        w0 = 2. * np.pi * self.fc() # angular frequency
         fourier_factor = 4. * np.pi / (w0 + np.sqrt(2. + w0**2))
-        self.coi_coef = fourier_factor / (self.sampf * np.sqrt(2))
-
-        # Initialize the scales
-        if scales is None:
-            if limit_coi:
-                max_period = np.max(self.coi())
-                max_period = np.min([max_period, T])
-            else:
-                # compute Nscales to scan from P=0 to P=T
-                max_period = T
-            max_scale = max_period * self.fc * self.sampf
-            min_period = 2. / self.sampf
-            min_scale = min_period * self.fc * self.sampf # == self.fc
-            self.scales = np.arange(min_scale, max_scale, scale_ival)
-        else:
-            self.scales = scales
-
+        return fourier_factor / (self.sampf * np.sqrt(2))
+        
     def coefs(self):
         """Calculate the coefficients for the Morlet mother wavelet."""
 
@@ -411,9 +391,10 @@ class Morlet(MotherWavelet):
         # find mother wavelet coefficients at each scale
         xsd = xi / (self.scales[:,np.newaxis])
 
+        fc = self.fc()
         mw = np.power(np.pi,-0.25) * \
-                     (np.exp(np.complex(1j) * 2. * np.pi * self.fc * xsd) - \
-                     np.exp(-np.power((2. * np.pi * self.fc), 2) / 2.)) *  \
+                     (np.exp(np.complex(1j) * 2. * np.pi * fc * xsd) - \
+                     np.exp(-np.power((2. * np.pi * fc), 2) / 2.)) *  \
                      np.exp(-np.power(xsd, 2) / 2.)
 
         return mw
@@ -527,7 +508,7 @@ class WaveletResult(object):
 
     def periods(self):
         """Return a period axis"""
-        return self.mother.scales / self.mother.fc / self.mother.sampf
+        return self.mother.scales / self.mother.fc() / self.mother.sampf
 
     def gws(self):
         """Calculate Global Wavelet Spectrum.
@@ -556,7 +537,7 @@ class WaveletResult(object):
 
         """
 
-        coef = 1. / (self.mother.fc * self.mother.cg)
+        coef = 1. / (self.mother.fc() * self.mother.cg())
 
         wes = coef * trapz(np.power(np.abs(self.coefs), 2), axis = 1);
 
@@ -589,7 +570,7 @@ class WaveletResult(object):
 
         """
 
-        coef =  self.mother.cg * self.mother.fc
+        coef =  self.mother.cg() * self.mother.fc()
 
         wvar = (coef / self.mother.len_signal) * self.wes()
 
@@ -695,7 +676,7 @@ class WaveletResult(object):
             # coi_coef is defined using the assumption that you are using
             #   period, not scale, in plotting - this handles that behavior
             if not use_period:
-                coi = self.mother.coi() / self.mother.fc / self.mother.sampf
+                coi = self.mother.coi() / self.mother.fc() / self.mother.sampf
             else:
                 coi = self.mother.coi()
 
@@ -733,7 +714,7 @@ class WaveletResult(object):
             if use_period:
                 ax2.plot(self.wps(), y, 'k')
             else:
-                ax2.plot(self.mother.fc * self.wps(), y, 'k')
+                ax2.plot(self.mother.fc() * self.wps(), y, 'k')
 
             if ylog_base is not None:
                 ax2.axes.set_yscale('log', basey=ylog_base)
